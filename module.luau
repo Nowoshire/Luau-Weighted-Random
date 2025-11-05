@@ -1,4 +1,4 @@
---[[
+--[=[
 	-- Weighted Random --
 	
 	A library that provides functions to sample from a discrete probability distribution, with
@@ -28,52 +28,65 @@
 	
 	Library:
 		[ Linear Scan ]:
-			type LinearTable<K = any> = {
-				weights: {[K]: number},
-				sum: number,
-				n: number
+			type LinearTable<K = number> = {
+				weights: WeightTable<K>,
+				sum: number
 			}
 		
-			-- Creates a new LinearTable from the given weights for the Linear Scan method.
-			-- This is an optional precomputation step that can be used to avoid recalculating the total weight if the distribution has not changed.
-			--
-			-- The complexity of this function is O(n).
-			function newLinear <K>(weights: {[K]: number}): (LinearTable<K>)
+			--[[
+				Creates a new LinearTable from the given weights for the Linear Scan method.
+				This is an optional precomputation step that can be used to avoid recalculating the total weight if the distribution has not changed.
+				
+				The complexity of this function is O(n).
+			]]
+			function WeightedRandom.buildLinear <K>(weights: WeightTable<K>): (LinearTable<K>)
 		
-			-- Picks a random value from the given LinearTable or table of weights using a linear scan.
-			-- The complexity of this function is O(n).
-			function pickLinear <K>(linearTable: LinearTable<K> | {[K]: number}): (K | number)
+			--[[
+				Picks a random value from the given LinearTable or table of weights using a linear scan.
+				The complexity of this function is O(n).
+			]]
+			function WeightedRandom.sampleLinear <K>(linearTable: LinearTable<K> | WeightTable<K>): (K)
 			
 		[ Prefix Sum + Binary Search ]:
-			type PreSumTable = {
+			type PreSumTable<K = number> = {
 				preSums: {number},
 				sum: number,
-				n: number
+				n: number,
+				lookup: {K}?
 			}
 			
-			-- Creates a new PreSumTable from the given weights for the Prefix Sum + Binary Search method.
-			-- The complexity of this function is O(n).
-			function newPreSum(weights: {number}): (PreSumTable)
+			--[[
+				Creates a new PreSumTable from the given weights for the Prefix Sum + Binary Search method.
+				The complexity of this function is O(n).
+			]]
+			function WeightedRandom.buildPreSum <K>(weights: WeightTable<K>): (PreSumTable<K>)
 			
-			-- Picks a random index from the given PreSumTable using a binary search.
-			-- The complexity of this function is O(log n).
-			function pickPreSum(presumTable: PreSumTable): (number)
+			--[[
+				Picks a random value from the given PreSumTable using a binary search.
+				The complexity of this function is O(log n).
+			]]
+			function WeightedRandom.samplePreSum <K>(presumTable: PreSumTable<K>): (K)
 		
 		[ Alias Method (A.J. Walker) ]:
-			type AliasTable = {
+			type AliasTable<K = number> = {
 				alias: {number},
 				prob: {number},
-				n: number
+				n: number,
+				lookup: {K}?
 			}
 		
-			-- Creates a new AliasTable from the given weights for the Alias Method by A.J. Walker.
-			-- The complexity of this function is O(n).
-			function newAlias(weights: {number}): (AliasTable)
+			--[[
+				Creates a new AliasTable from the given weights for the Alias Method by A.J. Walker.
+				The complexity of this function is O(n).
+			]]
+			function WeightedRandom.buildAlias(weights: {number}): (AliasTable)
 		
-			-- Picks a random index from the given AliasTable using a constant-time search.
-			-- The complexity of this function is O(1).
-			function pickAlias(aliasTable: AliasTable): (number)
-]]
+			--[[
+				Picks a random value from the given AliasTable using a constant-time search.
+				The complexity of this function is O(1).
+			]]
+			function WeightedRandom.sampleAlias(aliasTable: AliasTable): (number)
+]=]
 
 --!strict
 --!optimize 2
@@ -86,11 +99,9 @@ type WeightTable<K> = {
 	[K]: number
 }
 
-export type AliasTable<K = number> = {
-	alias: {number},
-	prob: {number},
-	n: number,
-	lookup: {K}?
+export type LinearTable<K = number> = {
+	weights: WeightTable<K>,
+	sum: number
 }
 
 export type PreSumTable<K = number> = {
@@ -100,9 +111,11 @@ export type PreSumTable<K = number> = {
 	lookup: {K}?
 }
 
-export type LinearTable<K = number> = {
-	weights: WeightTable<K>,
-	sum: number
+export type AliasTable<K = number> = {
+	alias: {number},
+	prob: {number},
+	n: number,
+	lookup: {K}?
 }
 
 -- Misc --
@@ -116,7 +129,7 @@ local function sumWeight(weights: {number}): (number)
 	for _, weight in weights do
 		sum += weight
 	end
-	
+
 	return sum
 end
 
@@ -134,19 +147,19 @@ local function buildWeightArrayAndLookup <K>(weights: WeightTable<K>): ({number}
 	if lastKey == nil then
 		return weights, nil
 	end
-	
+
 	-- weights has a hash portion, build weight array and lookup table.
 	local weightArray = table.move(weights, 1, numWeights, 1, table.create(numWeights) :: {number}) -- prealloc what we can
 	local lookup = {} -- only provides lookup for entries in the hash portion
-	
+
 	while lastKey ~= nil do
 		numWeights += 1
 		weightArray[numWeights] = weight
 		lookup[numWeights] = lastKey
-		
+
 		lastKey, weight = next(weights, lastKey)
 	end
-	
+
 	return weightArray, lookup
 end
 
@@ -173,15 +186,15 @@ function WeightedRandom.sampleLinear <K>(linearTable: LinearTable<K> | WeightTab
 	local total = (linearTable :: LinearTable).sum or sumWeight(linearTable)
 	local weights = (linearTable :: LinearTable).weights or linearTable
 	local rand = rng:NextNumber() * total
-	
+
 	for k, weight in weights do
 		rand -= weight
-		
+
 		if rand <= 0 then
 			return k
 		end
 	end
-	
+
 	-- fallback
 	return (next(weights))
 end
@@ -195,12 +208,12 @@ function WeightedRandom.buildPreSum <K>(weights: WeightTable<K>): (PreSumTable<K
 	local numWeights = #weightArray
 	local prefixSums = table.create(numWeights) :: {number} -- pre-alloc
 	local weightSum = 0
-	
+
 	for i, weight in weightArray do
 		weightSum += weight
 		prefixSums[i] = weightSum
 	end
-	
+
 	return {
 		preSums = prefixSums,
 		sum = weightSum,
@@ -218,7 +231,7 @@ function WeightedRandom.samplePreSum <K>(presumTable: PreSumTable<K>): (K)
 	local low, high = 1, presumTable.n
 	local rand = rng:NextNumber() * presumTable.sum
 	local lookup = presumTable.lookup
-	
+
 	-- Binary search
 	while low < high do
 		local mid = (low + high) // 2
@@ -228,7 +241,7 @@ function WeightedRandom.samplePreSum <K>(presumTable: PreSumTable<K>): (K)
 			high = mid
 		end
 	end
-	
+
 	return lookup and lookup[low] or low
 end
 
