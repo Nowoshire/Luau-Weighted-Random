@@ -11,7 +11,7 @@
 		
 	Available Algorithms:
 		- Linear Scan
-			- Very simple algorithm with optional or no precomputation, at the cost of O(n) sampling.
+			- Very simple algorithm with minimal or no precomputation, at the cost of O(n) sampling.
 			- Trivial dynamic weights.
 			- Suited for small or ephemeral distributions for a handful of samples.
 			
@@ -77,31 +77,40 @@
 
 --!strict
 --!optimize 2
+--!native
 
 local WeightedRandom = {}
 
 -- Types --
-export type AliasTable = {
+type WeightTable<K> = {
+	[K]: number
+}
+
+export type AliasTable<K = number> = {
 	alias: {number},
 	prob: {number},
-	n: number
+	n: number,
+	lookup: {K}?
 }
 
-export type PreSumTable = {
+export type PreSumTable<K = number> = {
 	preSums: {number},
 	sum: number,
-	n: number
+	n: number,
+	lookup: {K}?
 }
 
-export type LinearTable<K = any> = {
-	weights: {[K]: number},
-	sum: number,
-	n: number
+export type LinearTable<K = number> = {
+	weights: WeightTable<K>,
+	sum: number
 }
 
 -- Misc --
 local rng = Random.new()
 
+--[[
+	Returns the sum of all the weights in the given table.
+]]
 local function sumWeight(weights: {number}): (number)
 	local sum = 0
 	for _, weight in weights do
@@ -109,6 +118,36 @@ local function sumWeight(weights: {number}): (number)
 	end
 	
 	return sum
+end
+
+--[[
+	Builds a weight array and a lookup table from the given <code>weight</code> table if it contains a hash portion, otherwise returns the original <code>weight</code> table and nil.
+]]
+local function buildWeightArrayAndLookup <K>(weights: WeightTable<K>): ({number}, {K}?)
+	local numWeights = #weights
+	local lastKey, weight = next(weights, if numWeights ~= 0 then numWeights else nil)
+
+	-- Check if the weight table has a hash portion and skip conversion if it doesn't.
+	-- Luau guarantees that the array portion of a table is visited before the hash portion, and
+	-- the element at #t exists, meaning we can do a quick amortized O(1) check with `next(t, #t)`.
+	-- See https://rfcs.luau.org/generalized-iteration.html#default-table-iteration for more information.
+	if lastKey == nil then
+		return weights, nil
+	end
+	
+	-- weights has a hash portion, build weight array and lookup table.
+	local weightArray = table.move(weights, 1, numWeights, 1, table.create(numWeights) :: {number}) -- prealloc what we can
+	local lookup = {} -- only provides lookup for entries in the hash portion
+	
+	while lastKey ~= nil do
+		numWeights += 1
+		weightArray[numWeights] = weight
+		lookup[numWeights] = lastKey
+		
+		lastKey, weight = next(weights, lastKey)
+	end
+	
+	return weightArray, lookup
 end
 
 -- Library Functions --
@@ -119,11 +158,10 @@ end
 	
 	The complexity of this function is <strong><em>O(n)</em></strong>.
 ]]
-function WeightedRandom.newLinear <K>(weights: {[K]: number}): (LinearTable<K>)
+function WeightedRandom.buildLinear <K>(weights: WeightTable<K>): (LinearTable<K>)
 	return {
 		weights = weights,
 		sum = sumWeight(weights),
-		n = #weights
 	}
 end
 
@@ -131,40 +169,43 @@ end
 	Picks a random value from the given <code>LinearTable</code> or table of weights using a linear scan.
 	The complexity of this function is <strong><em>O(n)</em></strong>.
 ]]
-function WeightedRandom.pickLinear <K>(linearTable: LinearTable<K> | {[K]: number}): (K)
+function WeightedRandom.sampleLinear <K>(linearTable: LinearTable<K> | WeightTable<K>): (K)
 	local total = (linearTable :: LinearTable).sum or sumWeight(linearTable)
 	local weights = (linearTable :: LinearTable).weights or linearTable
 	local rand = rng:NextNumber() * total
 	
-	for i, weight in weights do
+	for k, weight in weights do
 		rand -= weight
 		
 		if rand <= 0 then
-			return i
+			return k
 		end
 	end
 	
-	return (linearTable :: LinearTable).n or #weights
+	-- fallback
+	return (next(weights))
 end
 
 --[[
 	Creates a new <code>PreSumTable</code> from the given <code>weights</code> for the <strong>Prefix Sum + Binary Search</strong> method.
 	The complexity of this function is <strong><em>O(n)</em></strong>.
 ]]
-function WeightedRandom.newPreSum(weights: {number}): (PreSumTable)
-	local weightSum = 0
-	local numWeights = #weights
+function WeightedRandom.buildPreSum <K>(weights: WeightTable<K>): (PreSumTable<K>)
+	local weightArray, lookup = buildWeightArrayAndLookup(weights)
+	local numWeights = #weightArray
 	local prefixSums = table.create(numWeights) :: {number} -- pre-alloc
+	local weightSum = 0
 	
-	for i, weight in weights do
+	for i, weight in weightArray do
 		weightSum += weight
-		prefixSums[i] = weight
+		prefixSums[i] = weightSum
 	end
 	
 	return {
 		preSums = prefixSums,
 		sum = weightSum,
 		n = numWeights,
+		lookup = lookup
 	}
 end
 
@@ -172,10 +213,11 @@ end
 	Picks a random value from the given <code>PreSumTable</code> using a binary search.
 	The complexity of this function is <strong><em>O(log n)</em></strong>.
 ]]
-function WeightedRandom.pickPreSum(presumTable: PreSumTable): (number)
+function WeightedRandom.samplePreSum <K>(presumTable: PreSumTable<K>): (K)
 	local prefixSums = presumTable.preSums
 	local low, high = 1, presumTable.n
 	local rand = rng:NextNumber() * presumTable.sum
+	local lookup = presumTable.lookup
 	
 	-- Binary search
 	while low < high do
@@ -187,24 +229,24 @@ function WeightedRandom.pickPreSum(presumTable: PreSumTable): (number)
 		end
 	end
 	
-	return low
+	return lookup and lookup[low] or low
 end
 
 --[[
 	Creates a new <code>AliasTable</code> from the given <code>weights</code> for the <strong>Alias Method</strong> by A.J. Walker.
 	The complexity of this function is <strong><em>O(n)</em></strong>.
 ]]
-function WeightedRandom.newAlias(weights: {number}): (AliasTable)
+function WeightedRandom.buildAlias(weights: {number}): (AliasTable)
 	local weightSum = sumWeight(weights)
-
-	local numWeights = #weights
+	local weightArray, lookup = buildWeightArrayAndLookup(weights)
+	local numWeights = #weightArray
 	local avgNormWeight = numWeights / weightSum
 	local normWeights = table.create(numWeights) :: {number}
 
-	-- pre-alloc, optimal heuristic for all scenarios, avoids expensive reallocations down the line.
+	-- pre-alloc, optimal heuristic for all scenarios, avoids expensive rehashing down the line.
 	local smallStack, largeStack = table.create(numWeights) :: {number}, table.create(numWeights) :: {number}
 
-	for i, weight in weights do
+	for i, weight in weightArray do
 		local norm = weight * avgNormWeight
 		normWeights[i] = norm
 
@@ -245,6 +287,7 @@ function WeightedRandom.newAlias(weights: {number}): (AliasTable)
 		alias = alias,
 		prob = prob,
 		n = numWeights,
+		lookup = lookup
 	}
 end
 
@@ -252,12 +295,14 @@ end
 	Picks a random value from the given <code>AliasTable</code> using a constant-time search.
 	The complexity of this function is <strong><em>O(1)</em></strong>.
 ]]
-function WeightedRandom.pickAlias(aliasTable: AliasTable): (number)
-	local indexInt = rng:NextInteger(1, aliasTable.n)
+function WeightedRandom.sampleAlias(aliasTable: AliasTable): (number)
+	local rand = rng:NextInteger(1, aliasTable.n)
+	local result = if rng:NextNumber() < aliasTable.prob[rand]
+		then rand
+		else aliasTable.alias[rand]
+	local lookup = aliasTable.lookup
 
-	return if rng:NextNumber() < aliasTable.prob[indexInt]
-		then indexInt
-		else aliasTable.alias[indexInt]
+	return lookup and lookup[result] or result
 end
 
 return WeightedRandom
