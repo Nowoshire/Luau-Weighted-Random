@@ -79,13 +79,13 @@
 				Creates a new AliasTable from the given weights for the Alias Method by A.J. Walker.
 				The complexity of this function is O(n).
 			]]
-			function WeightedRandom.buildAlias(weights: {number}): (AliasTable)
+			function WeightedRandom.buildAlias <K>(weights: WeightTable<K>): (AliasTable<K>)
 		
 			--[[
 				Picks a random value from the given AliasTable using a constant-time search.
 				The complexity of this function is O(1).
 			]]
-			function WeightedRandom.sampleAlias(aliasTable: AliasTable): (number)
+			function WeightedRandom.sampleAlias <K>(aliasTable: AliasTable<K>): (K)
 ]=]
 
 --!strict
@@ -249,7 +249,7 @@ end
 	Creates a new <code>AliasTable</code> from the given <code>weights</code> for the <strong>Alias Method</strong> by A.J. Walker.
 	The complexity of this function is <strong><em>O(n)</em></strong>.
 ]]
-function WeightedRandom.buildAlias(weights: {number}): (AliasTable)
+function WeightedRandom.buildAlias <K>(weights: WeightTable<K>): (AliasTable<K>)
 	local weightSum = sumWeight(weights)
 	local weightArray, lookup = buildWeightArrayAndLookup(weights)
 	local numWeights = #weightArray
@@ -308,7 +308,7 @@ end
 	Picks a random value from the given <code>AliasTable</code> using a constant-time search.
 	The complexity of this function is <strong><em>O(1)</em></strong>.
 ]]
-function WeightedRandom.sampleAlias(aliasTable: AliasTable): (number)
+function WeightedRandom.sampleAlias <K>(aliasTable: AliasTable<K>): (K)
 	local rand = rng:NextInteger(1, aliasTable.n)
 	local result = if rng:NextNumber() < aliasTable.prob[rand]
 		then rand
