@@ -148,13 +148,14 @@ local function buildWeightArrayAndLookup <K>(weights: WeightTable<K>): ({number}
 		return weights, nil
 	end
 
+	numWeights += 1
+
 	-- weights has a hash portion, build weight array and lookup table.
 	local weightArray = table.move(weights, 1, numWeights, 1, table.create(numWeights) :: {number}) -- prealloc what we can
-	local lookup = {} -- only provides lookup for entries in the hash portion
-
-	numWeights += 1
+	local lookup = {
+		[numWeights] = lastKey	
+	} -- only provides lookup for entries in the hash portion
 	weightArray[numWeights] = weight
-	lookup[numWeights] = lastKey
 
 	for key, weight in next, weights, lastKey do
 		numWeights += 1
