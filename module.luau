@@ -141,8 +141,8 @@ local function buildWeightArrayAndLookup <K>(weights: WeightTable<K>): ({number}
 	local lastKey, weight = next(weights, if numWeights ~= 0 then numWeights else nil)
 
 	-- Check if the weight table has a hash portion and skip conversion if it doesn't.
-	-- Luau guarantees that the array portion of a table is visited before the hash portion, and
-	-- the element at #t exists, meaning we can do a quick amortized O(1) check with `next(t, #t)`.
+	-- Luau guarantees that the array portion of a table is visited before the hash portion, and the element at
+	-- index #t is stored in the array portion, meaning we can do a quick amortized O(1) check with `next(t, #t)`.
 	-- See https://rfcs.luau.org/generalized-iteration.html#default-table-iteration for more information.
 	if lastKey == nil then
 		return weights, nil
