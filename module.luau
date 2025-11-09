@@ -181,7 +181,7 @@ end
 function WeightedRandom.sampleLinear <T>(linearTable: LinearTable<T>): (keyof<T>)
 	local total = linearTable.sum
 	local weights = linearTable.weights
-	local rand = rng:NextNumber() * total
+	local rand = rng:NextNumber(0, total)
 
 	for k, weight in weights do
 		rand -= weight
@@ -202,7 +202,7 @@ end
 function WeightedRandom.sampleLinearNoPrecomp <T>(weights: T): (keyof<T>)
 	local weights = weights :: WeightTable -- cant annotate the types of generics, so we'll have to do this
 	local total = sumWeight(weights)
-	local rand = rng:NextNumber() * total
+	local rand = rng:NextNumber(0, total)
 
 	for k, weight in weights do
 		rand -= weight
@@ -252,7 +252,7 @@ end
 function WeightedRandom.samplePreSum <T>(presumTable: PreSumTable<T>): (keyof<T>)
 	local prefixSums = presumTable.preSums
 	local low, high = 1, presumTable.n
-	local rand = rng:NextNumber() * presumTable.sum
+	local rand = rng:NextNumber(0, presumTable.sum)
 	local lookup = presumTable.lookup
 
 	-- Binary search
