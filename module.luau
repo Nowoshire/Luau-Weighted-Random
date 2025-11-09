@@ -1,7 +1,7 @@
 --[=[
 	-- Weighted Random --
 	
-	A library that provides functions to sample from a discrete probability distribution, with
+	A library that provides functions and methods to sample from a discrete probability distribution, with
 	various algorithms suited for specific scenarios.
 	
 	Copyright (c) 2025 Nowoshire
@@ -27,65 +27,76 @@
 			- Suited for heavy sampling with static weights.
 	
 	Library:
-		[ Linear Scan ]:
-			type LinearTable<K = number> = {
-				weights: WeightTable<K>,
-				sum: number
-			}
+		> Linear Scan <
+		---------------
+		--[[
+			Creates a new LinearTable from the given weights for the Linear Scan method.
+			This is an optional precomputation step that can be used to avoid recalculating the total weight if the distribution has not changed.
+			
+			The complexity of this function is O(n).
+		]]
+		function buildLinear <T>(weights: T): (LinearTable<T>)
+	
+		--[[
+			Picks a random value from the given LinearTable using a linear scan.
+			The complexity of this function is O(n).
+		]]
+		function sampleLinear <T>(linearTable: LinearTable<T>): (keyof<T>)
 		
-			--[[
-				Creates a new LinearTable from the given weights for the Linear Scan method.
-				This is an optional precomputation step that can be used to avoid recalculating the total weight if the distribution has not changed.
-				
-				The complexity of this function is O(n).
-			]]
-			function WeightedRandom.buildLinear <K>(weights: WeightTable<K>): (LinearTable<K>)
+		--[[
+			Picks a random value from the given weights using a linear scan.
+			The complexity of this function is O(n).
+		]]
+		function WeightedRandom.sampleLinearNoPrecomp <T>(weights: T): (keyof<T>)
 		
+		[ LinearTable ]:
 			--[[
-				Picks a random value from the given LinearTable or table of weights using a linear scan.
+				Picks a random value from the given LinearTable using a linear scan.
 				The complexity of this function is O(n).
 			]]
-			function WeightedRandom.sampleLinear <K>(linearTable: LinearTable<K> | WeightTable<K>): (K)
-			
-		[ Prefix Sum + Binary Search ]:
-			type PreSumTable<K = number> = {
-				preSums: {number},
-				sum: number,
-				n: number,
-				lookup: {K}?
-			}
-			
-			--[[
-				Creates a new PreSumTable from the given weights for the Prefix Sum + Binary Search method.
-				The complexity of this function is O(n).
-			]]
-			function WeightedRandom.buildPreSum <K>(weights: WeightTable<K>): (PreSumTable<K>)
-			
+			function Sample <T>(self: LinearTable<T>): (keyof<T>) 
+		
+		> Prefix Sum + Binary Search <
+		------------------------------
+		--[[
+			Creates a new PreSumTable from the given weights for the Prefix Sum + Binary Search method.
+			The complexity of this function is O(n).
+		]]
+		function buildPreSum <T>(weights: T): (PreSumTable<T>)
+		
+		--[[
+			Picks a random value from the given PreSumTable using a binary search.
+			The complexity of this function is O(log n).
+		]]
+		function samplePreSum <T>(presumTable: PreSumTable<T>): (keyof<T>)
+		
+		[ PreSumTable ]:
 			--[[
 				Picks a random value from the given PreSumTable using a binary search.
 				The complexity of this function is O(log n).
 			]]
-			function WeightedRandom.samplePreSum <K>(presumTable: PreSumTable<K>): (K)
+			function Sample <T>(self: PreSumTable<T>): (keyof<T>)
 		
-		[ Alias Method (A.J. Walker) ]:
-			type AliasTable<K = number> = {
-				alias: {number},
-				prob: {number},
-				n: number,
-				lookup: {K}?
-			}
+		> Alias Method (A.J. Walker) <
+		------------------------------
+		--[[
+			Creates a new AliasTable from the given weights for the Alias Method by A.J. Walker.
+			The complexity of this function is O(n).
+		]]
+		function buildAlias <T>(weights: T): (AliasTable<T>)
+	
+		--[[
+			Picks a random value from the given AliasTable using a constant-time search.
+			The complexity of this function is O(1).
+		]]
+		function sampleAlias <T>(aliasTable: AliasTable<T>): (keyof<T>)
 		
-			--[[
-				Creates a new AliasTable from the given weights for the Alias Method by A.J. Walker.
-				The complexity of this function is O(n).
-			]]
-			function WeightedRandom.buildAlias <K>(weights: WeightTable<K>): (AliasTable<K>)
-		
+		[ AliasTable ]:
 			--[[
 				Picks a random value from the given AliasTable using a constant-time search.
 				The complexity of this function is O(1).
 			]]
-			function WeightedRandom.sampleAlias <K>(aliasTable: AliasTable<K>): (K)
+			function Sample <T>(self: AliasTable<T>): (keyof<T>)
 ]=]
 
 --!strict
@@ -93,30 +104,6 @@
 --!native
 
 local WeightedRandom = {}
-
--- Types --
-type WeightTable<K> = {
-	[K]: number
-}
-
-export type LinearTable<K = number> = {
-	weights: WeightTable<K>,
-	sum: number
-}
-
-export type PreSumTable<K = number> = {
-	preSums: {number},
-	sum: number,
-	n: number,
-	lookup: {K}?
-}
-
-export type AliasTable<K = number> = {
-	alias: {number},
-	prob: {number},
-	n: number,
-	lookup: {K}?
-}
 
 -- Misc --
 local rng = Random.new()
@@ -168,26 +155,32 @@ end
 
 -- Library Functions --
 
+local linearMetatable = {
+	__index = {
+		Sample = WeightedRandom.sampleLinear
+	}
+}
+
 --[[
 	Creates a new <code>LinearTable</code> from the given <code>weights</code> for the <strong>Linear Scan</strong> method.
 	This is an optional precomputation step that can be used to avoid recalculating the total weight if the distribution has not changed.
 	
 	The complexity of this function is <strong><em>O(n)</em></strong>.
 ]]
-function WeightedRandom.buildLinear <K>(weights: WeightTable<K>): (LinearTable<K>)
-	return {
+function WeightedRandom.buildLinear <T>(weights: T): (LinearTable<T>)
+	return setmetatable({
 		weights = weights,
 		sum = sumWeight(weights),
-	}
+	}, linearMetatable)
 end
 
 --[[
-	Picks a random value from the given <code>LinearTable</code> or table of weights using a linear scan.
+	Picks a random value from the given <code>LinearTable</code> using a linear scan.
 	The complexity of this function is <strong><em>O(n)</em></strong>.
 ]]
-function WeightedRandom.sampleLinear <K>(linearTable: LinearTable<K> | WeightTable<K>): (K)
-	local total = (linearTable :: LinearTable).sum or sumWeight(linearTable)
-	local weights = (linearTable :: LinearTable).weights or linearTable
+function WeightedRandom.sampleLinear <T>(linearTable: LinearTable<T>): (keyof<T>)
+	local total = linearTable.sum
+	local weights = linearTable.weights
 	local rand = rng:NextNumber() * total
 
 	for k, weight in weights do
@@ -203,10 +196,37 @@ function WeightedRandom.sampleLinear <K>(linearTable: LinearTable<K> | WeightTab
 end
 
 --[[
+	Picks a random value from the given <code>weights</code> using a linear scan.
+	The complexity of this function is <strong><em>O(n)</em></strong>.
+]]
+function WeightedRandom.sampleLinearNoPrecomp <T>(weights: T): (keyof<T>)
+	local weights = weights :: WeightTable -- cant annotate the types of generics, so we'll have to do this
+	local total = sumWeight(weights)
+	local rand = rng:NextNumber() * total
+
+	for k, weight in weights do
+		rand -= weight
+
+		if rand <= 0 then
+			return k
+		end
+	end
+
+	-- fallback
+	return (next(weights))
+end
+
+local presumMetatable = {
+	__index = {
+		Sample = WeightedRandom.samplePreSum
+	}
+}
+
+--[[
 	Creates a new <code>PreSumTable</code> from the given <code>weights</code> for the <strong>Prefix Sum + Binary Search</strong> method.
 	The complexity of this function is <strong><em>O(n)</em></strong>.
 ]]
-function WeightedRandom.buildPreSum <K>(weights: WeightTable<K>): (PreSumTable<K>)
+function WeightedRandom.buildPreSum <T>(weights: T): (PreSumTable<T>)
 	local weightArray, lookup = buildWeightArrayAndLookup(weights)
 	local numWeights = #weightArray
 	local prefixSums = table.create(numWeights) :: {number} -- pre-alloc
@@ -217,19 +237,19 @@ function WeightedRandom.buildPreSum <K>(weights: WeightTable<K>): (PreSumTable<K
 		prefixSums[i] = weightSum
 	end
 
-	return {
+	return setmetatable({
 		preSums = prefixSums,
 		sum = weightSum,
 		n = numWeights,
 		lookup = lookup
-	}
+	}, presumMetatable)
 end
 
 --[[
 	Picks a random value from the given <code>PreSumTable</code> using a binary search.
 	The complexity of this function is <strong><em>O(log n)</em></strong>.
 ]]
-function WeightedRandom.samplePreSum <K>(presumTable: PreSumTable<K>): (K)
+function WeightedRandom.samplePreSum <T>(presumTable: PreSumTable<T>): (keyof<T>)
 	local prefixSums = presumTable.preSums
 	local low, high = 1, presumTable.n
 	local rand = rng:NextNumber() * presumTable.sum
@@ -245,14 +265,20 @@ function WeightedRandom.samplePreSum <K>(presumTable: PreSumTable<K>): (K)
 		end
 	end
 
-	return lookup and lookup[low] or low
+	return lookup and lookup[low] or low :: any
 end
+
+local aliasMetatable = {
+	__index = {
+		Sample = WeightedRandom.sampleAlias
+	}
+}
 
 --[[
 	Creates a new <code>AliasTable</code> from the given <code>weights</code> for the <strong>Alias Method</strong> by A.J. Walker.
 	The complexity of this function is <strong><em>O(n)</em></strong>.
 ]]
-function WeightedRandom.buildAlias <K>(weights: WeightTable<K>): (AliasTable<K>)
+function WeightedRandom.buildAlias <T>(weights: T): (AliasTable<T>)
 	local weightSum = sumWeight(weights)
 	local weightArray, lookup = buildWeightArrayAndLookup(weights)
 	local numWeights = #weightArray
@@ -299,26 +325,50 @@ function WeightedRandom.buildAlias <K>(weights: WeightTable<K>): (AliasTable<K>)
 		prob[v] = 1
 	end
 
-	return {
+	return setmetatable({
 		alias = alias,
 		prob = prob,
 		n = numWeights,
 		lookup = lookup
-	}
+	}, aliasMetatable)
 end
 
 --[[
 	Picks a random value from the given <code>AliasTable</code> using a constant-time search.
 	The complexity of this function is <strong><em>O(1)</em></strong>.
 ]]
-function WeightedRandom.sampleAlias <K>(aliasTable: AliasTable<K>): (K)
+function WeightedRandom.sampleAlias <T>(aliasTable: AliasTable<T>): (keyof<T>)
 	local rand = rng:NextInteger(1, aliasTable.n)
 	local result = if rng:NextNumber() < aliasTable.prob[rand]
 		then rand
 		else aliasTable.alias[rand]
 	local lookup = aliasTable.lookup
 
-	return lookup and lookup[result] or result
+	return lookup and lookup[result] or result :: any
 end
+
+-- Types --
+type WeightTable<K = any> = {
+	[K]: number
+}
+
+export type LinearTable<weights> = typeof(setmetatable({} :: {
+	weights: WeightTable,
+	sum: number
+}, linearMetatable))
+
+export type PreSumTable<weights> = typeof(setmetatable({} :: {
+	preSums: {number},
+	sum: number,
+	n: number,
+	lookup: {any}?
+}, presumMetatable))
+
+export type AliasTable<weights> = typeof(setmetatable({} :: {
+	alias: {number},
+	prob: {number},
+	n: number,
+	lookup: {any}?
+}, aliasMetatable))
 
 return WeightedRandom
