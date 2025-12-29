@@ -125,7 +125,7 @@ end
 ]]
 local function buildWeightArrayAndLookup <K>(weights: WeightTable<K>): ({number}, {K}?)
 	local numWeights = #weights
-	local lastKey, weight = next(weights, if numWeights ~= 0 then numWeights else nil)
+	local lastKey, lastWeight = next(weights, if numWeights ~= 0 then numWeights else nil)
 
 	-- Check if the weight table has a hash portion and skip conversion if it doesn't.
 	-- Luau guarantees that the array portion of a table is visited before the hash portion, and the element at
@@ -142,7 +142,7 @@ local function buildWeightArrayAndLookup <K>(weights: WeightTable<K>): ({number}
 	local lookup = {
 		[numWeights] = lastKey	
 	} -- only provides lookup for entries in the hash portion
-	weightArray[numWeights] = weight
+	weightArray[numWeights] = lastWeight
 
 	for key, weight in next, weights, lastKey do
 		numWeights += 1
@@ -200,7 +200,8 @@ end
 	The complexity of this function is <strong><em>O(n)</em></strong>.
 ]]
 function WeightedRandom.sampleLinearNoPrecomp <T>(weights: T): (keyof<T>)
-	local weights = weights :: WeightTable -- cant annotate the types of generics, so we'll have to do this
+	weights = weights :: WeightTable -- cant annotate the types of generics, so we'll have to do this
+	
 	local total = sumWeight(weights)
 	local rand = rng:NextNumber(0, total)
 
@@ -352,19 +353,19 @@ type WeightTable<K = any> = {
 	[K]: number
 }
 
-export type LinearTable<weights> = typeof(setmetatable({} :: {
+export type LinearTable<weights = WeightTable> = typeof(setmetatable({} :: {
 	weights: WeightTable,
 	sum: number
 }, linearMetatable))
 
-export type PreSumTable<weights> = typeof(setmetatable({} :: {
+export type PreSumTable<weights = WeightTable> = typeof(setmetatable({} :: {
 	preSums: {number},
 	sum: number,
 	n: number,
 	lookup: {any}?
 }, presumMetatable))
 
-export type AliasTable<weights> = typeof(setmetatable({} :: {
+export type AliasTable<weights = WeightTable> = typeof(setmetatable({} :: {
 	alias: {number},
 	prob: {number},
 	n: number,
