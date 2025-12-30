@@ -155,25 +155,6 @@ end
 
 -- Library Functions --
 
-local linearMetatable = {
-	__index = {
-		Sample = WeightedRandom.sampleLinear
-	}
-}
-
---[[
-	Creates a new <code>LinearTable</code> from the given <code>weights</code> for the <strong>Linear Scan</strong> method.
-	This is an optional precomputation step that can be used to avoid recalculating the total weight if the distribution has not changed.
-	
-	The complexity of this function is <strong><em>O(n)</em></strong>.
-]]
-function WeightedRandom.buildLinear <T>(weights: T): (LinearTable<T>)
-	return setmetatable({
-		weights = weights,
-		sum = sumWeight(weights),
-	}, linearMetatable)
-end
-
 --[[
 	Picks a random value from the given <code>LinearTable</code> using a linear scan.
 	The complexity of this function is <strong><em>O(n)</em></strong>.
@@ -193,6 +174,25 @@ function WeightedRandom.sampleLinear <T>(linearTable: LinearTable<T>): (keyof<T>
 
 	-- fallback
 	return (next(weights))
+end
+
+local linearMetatable = {
+	__index = {
+		Sample = WeightedRandom.sampleLinear
+	}
+}
+
+--[[
+	Creates a new <code>LinearTable</code> from the given <code>weights</code> for the <strong>Linear Scan</strong> method.
+	This is an optional precomputation step that can be used to avoid recalculating the total weight if the distribution has not changed.
+	
+	The complexity of this function is <strong><em>O(n)</em></strong>.
+]]
+function WeightedRandom.buildLinear <T>(weights: T): (LinearTable<T>)
+	return setmetatable({
+		weights = weights,
+		sum = sumWeight(weights),
+	}, linearMetatable)
 end
 
 --[[
@@ -215,6 +215,29 @@ function WeightedRandom.sampleLinearNoPrecomp <T>(weights: T): (keyof<T>)
 
 	-- fallback
 	return (next(weights))
+end
+
+--[[
+	Picks a random value from the given <code>PreSumTable</code> using a binary search.
+	The complexity of this function is <strong><em>O(log n)</em></strong>.
+]]
+function WeightedRandom.samplePreSum <T>(presumTable: PreSumTable<T>): (keyof<T>)
+	local prefixSums = presumTable.preSums
+	local low, high = 1, presumTable.n
+	local rand = rng:NextNumber(0, presumTable.sum)
+	local lookup = presumTable.lookup
+
+	-- Binary search
+	while low < high do
+		local mid = (low + high) // 2
+		if rand > prefixSums[mid] then
+			low = mid + 1
+		else
+			high = mid
+		end
+	end
+
+	return lookup and lookup[low] or low :: any
 end
 
 local presumMetatable = {
@@ -247,26 +270,17 @@ function WeightedRandom.buildPreSum <T>(weights: T): (PreSumTable<T>)
 end
 
 --[[
-	Picks a random value from the given <code>PreSumTable</code> using a binary search.
-	The complexity of this function is <strong><em>O(log n)</em></strong>.
+	Picks a random value from the given <code>AliasTable</code> using a constant-time search.
+	The complexity of this function is <strong><em>O(1)</em></strong>.
 ]]
-function WeightedRandom.samplePreSum <T>(presumTable: PreSumTable<T>): (keyof<T>)
-	local prefixSums = presumTable.preSums
-	local low, high = 1, presumTable.n
-	local rand = rng:NextNumber(0, presumTable.sum)
-	local lookup = presumTable.lookup
+function WeightedRandom.sampleAlias <T>(aliasTable: AliasTable<T>): (keyof<T>)
+	local rand = rng:NextInteger(1, aliasTable.n)
+	local result = if rng:NextNumber() < aliasTable.prob[rand]
+		then rand
+		else aliasTable.alias[rand]
+	local lookup = aliasTable.lookup
 
-	-- Binary search
-	while low < high do
-		local mid = (low + high) // 2
-		if rand > prefixSums[mid] then
-			low = mid + 1
-		else
-			high = mid
-		end
-	end
-
-	return lookup and lookup[low] or low :: any
+	return lookup and lookup[result] or result :: any
 end
 
 local aliasMetatable = {
@@ -332,20 +346,6 @@ function WeightedRandom.buildAlias <T>(weights: T): (AliasTable<T>)
 		n = numWeights,
 		lookup = lookup
 	}, aliasMetatable)
-end
-
---[[
-	Picks a random value from the given <code>AliasTable</code> using a constant-time search.
-	The complexity of this function is <strong><em>O(1)</em></strong>.
-]]
-function WeightedRandom.sampleAlias <T>(aliasTable: AliasTable<T>): (keyof<T>)
-	local rand = rng:NextInteger(1, aliasTable.n)
-	local result = if rng:NextNumber() < aliasTable.prob[rand]
-		then rand
-		else aliasTable.alias[rand]
-	local lookup = aliasTable.lookup
-
-	return lookup and lookup[result] or result :: any
 end
 
 -- Types --
